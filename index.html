@@ -1,0 +1,739 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Friend Files</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<style>
+  :root{
+    --bg:#07090a;
+    --bg-2:#0d1113;
+    --panel:#0f1416;
+    --panel-2:#12191b;
+    --line:#1e2a2d;
+    --text:#c7d6d3;
+    --text-dim:#5f7876;
+    --green:#39ff8f;
+    --green-dim:#1f8a52;
+    --red:#ff3b4e;
+    --amber:#e8a13a;
+    --shadow: rgba(0,0,0,0.7);
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    font-family:'IBM Plex Mono', monospace;
+    color:var(--text);
+    background:
+      repeating-linear-gradient(0deg, rgba(255,255,255,0.012) 0px, rgba(255,255,255,0.012) 1px, transparent 1px, transparent 3px),
+      radial-gradient(ellipse at 20% -10%, #10201c 0%, transparent 45%),
+      radial-gradient(ellipse at 90% 110%, #1a1010 0%, transparent 45%),
+      var(--bg);
+    min-height:100vh;
+  }
+  @media (prefers-reduced-motion: reduce){
+    *{animation-duration:0.01ms !important; transition-duration:0.01ms !important;}
+  }
+  ::selection{background:var(--green-dim); color:#000;}
+
+  /* ---------- HEADER ---------- */
+  header{
+    position:sticky; top:0; z-index:40;
+    background:var(--bg-2);
+    border-bottom:1px solid var(--line);
+    padding:14px 20px;
+  }
+  .header-inner{
+    max-width:1200px; margin:0 auto;
+    display:flex; align-items:center; gap:18px; flex-wrap:wrap;
+  }
+  .logo-wrap{display:flex; align-items:baseline; gap:10px;}
+  .logo{
+    font-family:'JetBrains Mono', monospace; font-weight:700;
+    font-size:22px; color:var(--text); letter-spacing:0.5px;
+    text-shadow:0 0 12px rgba(57,255,143,0.25);
+  }
+  .logo span{color:var(--green);}
+  .logo::before{content:"> "; color:var(--green-dim);}
+  .tagline{
+    font-family:'IBM Plex Mono', monospace; font-weight:400;
+    font-size:12px; color:var(--text-dim); letter-spacing:0.5px;
+  }
+  .search-box{
+    flex:1; min-width:180px; max-width:340px;
+    display:flex; align-items:center; gap:8px;
+    background:var(--panel); border:1px solid var(--line); border-radius:3px;
+    padding:8px 12px;
+  }
+  .search-box::before{content:"$"; color:var(--green-dim); font-weight:600;}
+  .search-box input{
+    border:none; outline:none; background:transparent;
+    font-family:'IBM Plex Mono'; font-size:13px; width:100%; color:var(--text);
+  }
+  .search-box input::placeholder{color:var(--text-dim);}
+  .add-btn{
+    font-family:'JetBrains Mono', monospace; font-weight:600; font-size:13px;
+    background:transparent; color:var(--green); border:1px solid var(--green-dim);
+    padding:10px 16px; border-radius:3px; cursor:pointer;
+    transition:all 0.15s ease; letter-spacing:0.3px;
+  }
+  .add-btn:hover{background:rgba(57,255,143,0.08); box-shadow:0 0 14px rgba(57,255,143,0.25);}
+  .add-btn:active{transform:translateY(1px);}
+  .add-btn:focus-visible, .search-box:focus-within, button:focus-visible, [tabindex]:focus-visible{
+    outline:2px solid var(--green); outline-offset:2px;
+  }
+
+  /* ---------- TABS ---------- */
+  .tabs{
+    max-width:1200px; margin:0 auto; padding:16px 20px 0;
+    display:flex; gap:4px; flex-wrap:wrap;
+    border-bottom:1px solid var(--line);
+  }
+  .tab{
+    font-family:'JetBrains Mono', monospace; font-weight:500; font-size:12px;
+    background:transparent; color:var(--text-dim);
+    padding:9px 16px; border:none; border-bottom:2px solid transparent;
+    cursor:pointer; letter-spacing:0.5px; text-transform:uppercase;
+  }
+  .tab:hover{color:var(--text);}
+  .tab.active{
+    color:var(--green); border-bottom:2px solid var(--green);
+  }
+
+  /* ---------- BOARD / MASONRY ---------- */
+  main{max-width:1200px; margin:0 auto; padding:22px 20px 60px;}
+  .board{
+    background:var(--bg-2);
+    border:1px solid var(--line);
+    border-radius:4px;
+    padding:26px 22px;
+    min-height:300px;
+  }
+  .empty-note{
+    font-family:'IBM Plex Mono', monospace; font-size:14px; color:var(--text-dim);
+    text-align:center; padding:60px 20px;
+  }
+  .empty-note::before{content:"// "; color:var(--green-dim);}
+  .grid{
+    column-count:4; column-gap:18px;
+  }
+  @media (max-width:1000px){ .grid{column-count:3;} }
+  @media (max-width:720px){ .grid{column-count:2;} }
+  @media (max-width:460px){ .grid{column-count:1;} }
+
+  .card{
+    break-inside:avoid; margin-bottom:18px;
+    background:var(--panel); border:1px solid var(--line);
+    padding:0; border-radius:4px; overflow:hidden;
+    cursor:pointer; position:relative;
+    transition:transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+  }
+  .card:hover{
+    transform:translateY(-3px);
+    box-shadow:0 10px 26px var(--shadow), 0 0 0 1px var(--green-dim);
+    border-color:var(--green-dim);
+  }
+  .card:focus-visible{transform:translateY(-3px);}
+
+  .tag-strip{
+    position:absolute; top:0; left:0; right:0; height:3px; z-index:2;
+    background:var(--green-dim);
+  }
+  .card.video .tag-strip{background:var(--red);}
+
+  .status-chip{
+    position:absolute; top:10px; left:10px; z-index:2;
+    font-size:9px; letter-spacing:1px; text-transform:uppercase;
+    padding:3px 7px; border-radius:2px; font-family:'JetBrains Mono';
+    background:rgba(0,0,0,0.6); backdrop-filter:blur(2px);
+  }
+  .card.photo .status-chip{color:var(--green); border:1px solid var(--green-dim);}
+  .card.video .status-chip{color:var(--red); border:1px solid var(--red);}
+
+  .thumb-wrap{
+    position:relative; overflow:hidden;
+    background:#050707;
+  }
+  .thumb-wrap img, .thumb-wrap video{
+    width:100%; display:block; object-fit:cover;
+    filter:saturate(0.75) brightness(0.82) contrast(1.05);
+    transition:filter 0.2s ease;
+  }
+  .card:hover .thumb-wrap img, .card:hover .thumb-wrap video{
+    filter:saturate(0.95) brightness(0.95) contrast(1.05);
+  }
+  .thumb-wrap::after{
+    content:""; position:absolute; inset:0;
+    background:linear-gradient(180deg, rgba(0,0,0,0) 60%, rgba(0,0,0,0.55) 100%);
+    pointer-events:none;
+  }
+  .play-badge{
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+  }
+  .play-badge svg{
+    width:44px; height:44px; filter:drop-shadow(0 0 10px rgba(255,59,78,0.6));
+  }
+  .duration{
+    position:absolute; bottom:6px; right:6px;
+    background:rgba(0,0,0,0.8); color:var(--text); font-size:10px;
+    padding:2px 6px; border-radius:2px; font-family:'JetBrains Mono';
+    border:1px solid var(--line); z-index:2;
+  }
+  .card-body{padding:12px 12px 14px;}
+  .card-title{
+    font-family:'JetBrains Mono', monospace; font-weight:600; font-size:13px;
+    margin:0 0 6px; color:var(--text); letter-spacing:0.2px;
+  }
+  .card-meta{
+    display:flex; justify-content:space-between; align-items:center;
+    font-size:11px; color:var(--text-dim);
+  }
+  .card-meta span::before{content:"~"; color:var(--green-dim); margin-right:3px;}
+  .tags{display:flex; flex-wrap:wrap; gap:5px; margin-top:8px;}
+  .tag-chip{
+    font-size:10px; background:transparent; color:var(--text-dim);
+    padding:2px 7px; border-radius:2px; border:1px solid var(--line);
+  }
+  .tag-chip::before{content:"#";}
+  .fav-btn{
+    background:none; border:none; cursor:pointer; font-size:14px;
+    padding:2px; line-height:1; color:var(--amber);
+  }
+
+  /* ---------- MODAL: VIEWER ---------- */
+  .overlay{
+    position:fixed; inset:0; background:rgba(2,3,3,0.9);
+    display:flex; align-items:center; justify-content:center;
+    z-index:100; padding:20px;
+  }
+  .modal{
+    background:var(--bg-2); border:1px solid var(--line); border-radius:6px;
+    max-width:760px; width:100%;
+    max-height:90vh; overflow-y:auto; padding:22px;
+    box-shadow:0 20px 60px rgba(0,0,0,0.8);
+  }
+  .modal-media{width:100%; border-radius:4px; overflow:hidden; background:#000; margin-bottom:16px; border:1px solid var(--line);}
+  .modal-media img, .modal-media video, .modal-media iframe{width:100%; display:block; max-height:60vh;}
+  .modal-media iframe{aspect-ratio:16/9; height:auto;}
+  .modal h2{font-family:'JetBrains Mono'; margin:0 0 6px; font-size:18px; color:var(--text); font-weight:600;}
+  .modal .meta-row{font-size:12px; color:var(--text-dim); margin-bottom:10px;}
+  .modal-close{
+    float:right; background:transparent; color:var(--text); border:1px solid var(--line);
+    width:30px; height:30px; border-radius:3px; cursor:pointer; font-size:14px;
+  }
+  .modal-close:hover{border-color:var(--red); color:var(--red);}
+
+  /* ---------- MODAL: ADD ITEM ---------- */
+  .form-row{margin-bottom:14px; display:flex; flex-direction:column; gap:6px;}
+  .form-row label{font-family:'JetBrains Mono'; font-size:11px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.5px;}
+  .form-row input[type=text], .form-row textarea, .form-row select{
+    font-family:'IBM Plex Mono'; font-size:13px; padding:9px 10px;
+    border:1px solid var(--line); border-radius:3px; background:var(--panel); color:var(--text);
+  }
+  .form-row input:focus{outline:none; border-color:var(--green-dim);}
+  .type-toggle{display:flex; gap:8px;}
+  .type-toggle button{
+    flex:1; padding:9px; border-radius:3px; border:1px solid var(--line);
+    background:var(--panel); font-family:'JetBrains Mono'; font-weight:600; cursor:pointer;
+    color:var(--text-dim); font-size:12px;
+  }
+  .type-toggle button.active{background:rgba(57,255,143,0.08); border-color:var(--green-dim); color:var(--green);}
+  .submit-row{display:flex; gap:10px; margin-top:6px;}
+  .btn-primary{
+    background:var(--green-dim); color:#000; border:none; padding:10px 18px;
+    border-radius:3px; font-family:'JetBrains Mono'; font-weight:700; cursor:pointer; letter-spacing:0.3px;
+  }
+  .btn-primary:hover{background:var(--green);}
+  .btn-secondary{
+    background:none; border:1px solid var(--line); padding:9px 16px;
+    border-radius:3px; font-family:'JetBrains Mono'; font-weight:600; cursor:pointer; color:var(--text-dim);
+  }
+  .btn-secondary:hover{border-color:var(--red); color:var(--red);}
+  .hint{font-size:11px; color:var(--text-dim); font-family:'IBM Plex Mono';}
+  .form-row input[type=file]{
+    font-family:'IBM Plex Mono'; font-size:12px; color:var(--text-dim);
+    padding:9px 10px; border:1px dashed var(--line); border-radius:3px; background:var(--panel);
+  }
+  .form-row input[type=file]::file-selector-button{
+    font-family:'JetBrains Mono'; font-weight:600; font-size:11px;
+    background:transparent; color:var(--green); border:1px solid var(--green-dim);
+    padding:6px 10px; border-radius:3px; cursor:pointer; margin-right:10px;
+  }
+  .or-divider{
+    text-align:center; font-family:'JetBrains Mono'; font-size:11px; color:var(--text-dim);
+    margin:-4px 0 14px; letter-spacing:1px; text-transform:uppercase;
+  }
+  .or-divider::before, .or-divider::after{content:"—— "; color:var(--line);}
+  .or-divider::after{content:" ——";}
+  .file-preview{margin-top:10px; max-height:160px; overflow:hidden; border-radius:4px; border:1px solid var(--line);}
+  .file-preview img, .file-preview video{width:100%; display:block; max-height:160px; object-fit:cover;}
+  .upload-progress{
+    font-size:11px; color:var(--green); font-family:'JetBrains Mono'; margin-top:6px; display:none;
+  }
+  footer{text-align:center; padding:20px; font-family:'JetBrains Mono'; font-size:11px; color:var(--text-dim); letter-spacing:0.5px;}
+  footer::before{content:"[ "; color:var(--green-dim);}
+  footer::after{content:" ]"; color:var(--green-dim);}
+  .status-banner{
+    max-width:1200px; margin:14px auto 0; padding:10px 16px;
+    font-family:'JetBrains Mono'; font-size:12px; border-radius:4px;
+    display:none; letter-spacing:0.3px;
+  }
+  .status-banner.show{display:block;}
+  .status-banner.warn{background:rgba(232,161,58,0.1); border:1px solid var(--amber); color:var(--amber);}
+  .status-banner.err{background:rgba(255,59,78,0.1); border:1px solid var(--red); color:var(--red);}
+  .status-banner.ok{background:rgba(57,255,143,0.08); border:1px solid var(--green-dim); color:var(--green);}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-inner">
+    <div class="logo-wrap">
+      <div class="logo">friend<span>_files</span></div>
+      <div class="tagline">// private archive · friends only</div>
+    </div>
+    <div class="search-box">
+      <input id="searchInput" type="text" placeholder="search archive...">
+    </div>
+    <button class="add-btn" id="openAddBtn">+ upload</button>
+  </div>
+</header>
+
+<div class="status-banner" id="statusBanner"></div>
+
+<div class="tabs" id="tabs">
+  <button class="tab active" data-filter="all">all</button>
+  <button class="tab" data-filter="photo">photos</button>
+  <button class="tab" data-filter="video">videos</button>
+  <button class="tab" data-filter="favorites">starred</button>
+</div>
+
+<main>
+  <div class="board">
+    <div class="grid" id="grid"></div>
+    <div class="empty-note" id="emptyNote" style="display:none;">no files match query</div>
+  </div>
+</main>
+
+<footer>encrypted for your eyes only, probably</footer>
+
+<!-- Viewer modal -->
+<div class="overlay" id="viewerOverlay" style="display:none;">
+  <div class="modal">
+    <button class="modal-close" id="viewerClose">✕</button>
+    <div class="modal-media" id="viewerMedia"></div>
+    <h2 id="viewerTitle"></h2>
+    <div class="meta-row" id="viewerMeta"></div>
+    <div class="tags" id="viewerTags"></div>
+  </div>
+</div>
+
+<!-- Add modal -->
+<div class="overlay" id="addOverlay" style="display:none;">
+  <div class="modal" style="max-width:480px;">
+    <button class="modal-close" id="addClose">✕</button>
+    <h2 style="margin-top:0;">upload_new_file</h2>
+    <div class="type-toggle" id="typeToggle">
+      <button type="button" class="active" data-type="photo">photo</button>
+      <button type="button" data-type="video">video</button>
+    </div>
+    <form id="addForm">
+      <div class="form-row" style="margin-top:14px;">
+        <label for="titleInput">title</label>
+        <input type="text" id="titleInput" placeholder="beach day 2026" required>
+      </div>
+      <div class="form-row">
+        <label for="fileInput" id="fileLabel">upload from device</label>
+        <input type="file" id="fileInput" accept="image/*">
+        <span class="hint" id="fileHint">choose a photo from your device.</span>
+        <div class="file-preview" id="filePreview" style="display:none;"></div>
+      </div>
+      <div class="or-divider">or</div>
+      <div class="form-row">
+        <label for="urlInput" id="urlLabel">image url</label>
+        <input type="text" id="urlInput" placeholder="https://...">
+        <span class="hint" id="urlHint">paste a direct image link instead.</span>
+      </div>
+      <div class="form-row">
+        <label for="byInput">uploaded by</label>
+        <input type="text" id="byInput" placeholder="you" value="You">
+      </div>
+      <div class="form-row">
+        <label for="tagsInput">tags (comma separated)</label>
+        <input type="text" id="tagsInput" placeholder="summer, friends, 2026">
+      </div>
+      <div class="submit-row">
+        <button type="submit" class="btn-primary">pin_it</button>
+        <button type="button" class="btn-secondary" id="cancelAdd">cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+(function(){
+  // ============================================================
+  // SUPABASE CONFIG — fill these in with your own project's values
+  // (Project Settings → API in your Supabase dashboard).
+  // Leave as-is to run in local demo mode with sample data only.
+  // ============================================================
+  const SUPABASE_URL = 'https://hgwhdmxuuxanngujbhph.supabase.co';
+  const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imhnd2hkbXh1dXhhbm5ndWpiaHBoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgzMDA2MDMsImV4cCI6MjEwMzg3NjYwM30.OJTNMqT6T7Iz2PGV-47-FmA4ZkEfFHdSLwKS_9ZlvxQ';
+  const BUCKET = 'friend-files-media';
+  const TABLE = 'items';
+
+  const isConfigured = !SUPABASE_URL.includes('YOUR_') && !SUPABASE_ANON_KEY.includes('YOUR_');
+  const sb = isConfigured && window.supabase
+    ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+    : null;
+
+  const banner = document.getElementById('statusBanner');
+  function showBanner(msg, kind){
+    banner.textContent = msg;
+    banner.className = 'status-banner show ' + kind;
+  }
+  if(!isConfigured){
+    showBanner('// running in local demo mode — files won\'t be saved. Add your Supabase keys in the code to go live.', 'warn');
+  }
+
+  const seed = [
+    {id:1, type:'photo', title:'Rooftop sunset', by:'Mara', date:'Jun 14', tags:['golden hour','rooftop'], fav:true,
+      src:'https://picsum.photos/seed/ff1/500/650'},
+    {id:2, type:'video', title:'Big Buck Bunny clip', by:'Theo', date:'Jun 2', tags:['test video','funny'], fav:false,
+      src:'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4', duration:'0:10'},
+    {id:3, type:'photo', title:'Trail mix disaster', by:'Priya', date:'May 29', tags:['hiking','snacks'], fav:false,
+      src:'https://picsum.photos/seed/ff3/500/380'},
+    {id:4, type:'photo', title:'Late night diner', by:'You', date:'May 20', tags:['food','night'], fav:true,
+      src:'https://picsum.photos/seed/ff4/500/700'},
+    {id:5, type:'video', title:'Skate park fail compilation', by:'Theo', date:'May 11', tags:['skate','oops'], fav:false,
+      src:'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/friday.mp4', duration:'0:31'},
+    {id:6, type:'photo', title:'Dog tax', by:'Mara', date:'Apr 30', tags:['dogs','cute'], fav:true,
+      src:'https://picsum.photos/seed/ff6/500/500'},
+    {id:7, type:'photo', title:'Camping under stars', by:'Priya', date:'Apr 18', tags:['camping','night sky'], fav:false,
+      src:'https://picsum.photos/seed/ff7/500/620'},
+    {id:8, type:'photo', title:'Birthday cake chaos', by:'You', date:'Apr 3', tags:['birthday','cake'], fav:false,
+      src:'https://picsum.photos/seed/ff8/500/460'},
+  ];
+
+  let items = isConfigured ? [] : seed.slice();
+  let filter = 'all';
+  let query = '';
+  let addType = 'photo';
+
+  const grid = document.getElementById('grid');
+  const emptyNote = document.getElementById('emptyNote');
+
+  function youTubeId(url){
+    const m = url.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/))([\w-]{6,})/);
+    return m ? m[1] : null;
+  }
+
+  function render(){
+    const q = query.trim().toLowerCase();
+    const filtered = items.filter(it=>{
+      if(filter==='photo' && it.type!=='photo') return false;
+      if(filter==='video' && it.type!=='video') return false;
+      if(filter==='favorites' && !it.fav) return false;
+      if(q){
+        const hay = (it.title+' '+it.by+' '+it.tags.join(' ')).toLowerCase();
+        if(!hay.includes(q)) return false;
+      }
+      return true;
+    });
+
+    grid.innerHTML = '';
+    emptyNote.style.display = filtered.length ? 'none' : 'block';
+
+    filtered.forEach(it=>{
+      const card = document.createElement('div');
+      card.className = 'card ' + it.type;
+      card.tabIndex = 0;
+      card.setAttribute('role','button');
+      card.setAttribute('aria-label', 'Open ' + it.title);
+
+      const yt = it.type==='video' ? youTubeId(it.src) : null;
+      let thumbHtml;
+      if(it.type==='photo'){
+        thumbHtml = `<img src="${it.src}" alt="${escapeHtml(it.title)}" loading="lazy">`;
+      } else if(yt){
+        thumbHtml = `<img src="https://img.youtube.com/vi/${yt}/hqdefault.jpg" alt="${escapeHtml(it.title)}" loading="lazy">
+          <div class="play-badge">${playIcon()}</div>`;
+      } else {
+        thumbHtml = `<video src="${it.src}" muted preload="metadata"></video>
+          <div class="play-badge">${playIcon()}</div>
+          ${it.duration ? `<div class="duration">${it.duration}</div>` : ''}`;
+      }
+
+      card.innerHTML = `
+        <div class="tag-strip"></div>
+        <div class="status-chip">${it.type==='video' ? 'VID' : 'IMG'}</div>
+        <div class="thumb-wrap">${thumbHtml}</div>
+        <div class="card-body">
+          <p class="card-title">${escapeHtml(it.title)}</p>
+          <div class="card-meta">
+            <span>${escapeHtml(it.by)} · ${escapeHtml(it.date)}</span>
+            <button class="fav-btn" aria-label="Toggle favorite" data-id="${it.id}">${it.fav ? '★' : '☆'}</button>
+          </div>
+          <div class="tags">${it.tags.map(t=>`<span class="tag-chip">${escapeHtml(t)}</span>`).join('')}</div>
+        </div>
+      `;
+
+      card.addEventListener('click', (e)=>{
+        if(e.target.closest('.fav-btn')) return;
+        openViewer(it);
+      });
+      card.addEventListener('keydown', (e)=>{
+        if(e.key==='Enter' || e.key===' '){ e.preventDefault(); openViewer(it); }
+      });
+      card.querySelector('.fav-btn').addEventListener('click', async (e)=>{
+        e.stopPropagation();
+        it.fav = !it.fav;
+        render();
+        if(sb){
+          const { error } = await sb.from(TABLE).update({ fav: it.fav }).eq('id', it.id);
+          if(error) showBanner('// favorite didn\'t save: ' + error.message, 'err');
+        }
+      });
+
+      grid.appendChild(card);
+    });
+  }
+
+  function playIcon(){
+    return `<svg viewBox="0 0 24 24" fill="white"><circle cx="12" cy="12" r="11" fill="rgba(0,0,0,0.5)"/><path d="M9.5 7.5v9l8-4.5z" fill="white"/></svg>`;
+  }
+  function escapeHtml(s){
+    return String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  // ---- Tabs ----
+  document.getElementById('tabs').addEventListener('click', (e)=>{
+    const btn = e.target.closest('.tab');
+    if(!btn) return;
+    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+    btn.classList.add('active');
+    filter = btn.dataset.filter;
+    render();
+  });
+
+  document.getElementById('searchInput').addEventListener('input', (e)=>{
+    query = e.target.value;
+    render();
+  });
+
+  // ---- Viewer modal ----
+  const viewerOverlay = document.getElementById('viewerOverlay');
+  const viewerMedia = document.getElementById('viewerMedia');
+  const viewerTitle = document.getElementById('viewerTitle');
+  const viewerMeta = document.getElementById('viewerMeta');
+  const viewerTags = document.getElementById('viewerTags');
+
+  function openViewer(it){
+    const yt = it.type==='video' ? youTubeId(it.src) : null;
+    if(it.type==='photo'){
+      viewerMedia.innerHTML = `<img src="${it.src}" alt="${escapeHtml(it.title)}">`;
+    } else if(yt){
+      viewerMedia.innerHTML = `<iframe src="https://www.youtube.com/embed/${yt}?autoplay=1" title="${escapeHtml(it.title)}" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe>`;
+    } else {
+      viewerMedia.innerHTML = `<video src="${it.src}" controls autoplay></video>`;
+    }
+    viewerTitle.textContent = it.title;
+    viewerMeta.textContent = `${it.by} · ${it.date}`;
+    viewerTags.innerHTML = it.tags.map(t=>`<span class="tag-chip">${escapeHtml(t)}</span>`).join('');
+    viewerOverlay.style.display = 'flex';
+  }
+  function closeViewer(){
+    viewerMedia.innerHTML = '';
+    viewerOverlay.style.display = 'none';
+  }
+  document.getElementById('viewerClose').addEventListener('click', closeViewer);
+  viewerOverlay.addEventListener('click', (e)=>{ if(e.target===viewerOverlay) closeViewer(); });
+  document.addEventListener('keydown', (e)=>{ if(e.key==='Escape'){ closeViewer(); closeAdd(); } });
+
+  // ---- Add modal ----
+  const addOverlay = document.getElementById('addOverlay');
+  const urlLabel = document.getElementById('urlLabel');
+  const urlHint = document.getElementById('urlHint');
+  const fileLabel = document.getElementById('fileLabel');
+  const fileHint = document.getElementById('fileHint');
+  const fileInput = document.getElementById('fileInput');
+  const filePreview = document.getElementById('filePreview');
+  let pendingFileData = null; // {dataUrl, isVideo}
+
+  fileInput.addEventListener('change', ()=>{
+    const file = fileInput.files[0];
+    filePreview.style.display = 'none';
+    filePreview.innerHTML = '';
+    pendingFileData = null;
+    if(!file) return;
+
+    const isVideo = file.type.startsWith('video/');
+    if(addType==='photo' && isVideo){
+      alert('That looks like a video file — switch to the "video" tab above first.');
+      fileInput.value = '';
+      return;
+    }
+    if(addType==='video' && !isVideo){
+      alert('That looks like an image file — switch to the "photo" tab above first.');
+      fileInput.value = '';
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (e)=>{
+      pendingFileData = { dataUrl: e.target.result, isVideo, file };
+      filePreview.style.display = 'block';
+      filePreview.innerHTML = isVideo
+        ? `<video src="${e.target.result}" muted controls></video>`
+        : `<img src="${e.target.result}" alt="preview">`;
+    };
+    reader.readAsDataURL(file);
+  });
+
+  document.getElementById('openAddBtn').addEventListener('click', ()=>{
+    addOverlay.style.display = 'flex';
+  });
+  function closeAdd(){ addOverlay.style.display = 'none'; }
+  document.getElementById('addClose').addEventListener('click', closeAdd);
+  document.getElementById('cancelAdd').addEventListener('click', closeAdd);
+  addOverlay.addEventListener('click', (e)=>{ if(e.target===addOverlay) closeAdd(); });
+
+  document.getElementById('typeToggle').addEventListener('click', (e)=>{
+    const btn = e.target.closest('button');
+    if(!btn) return;
+    document.querySelectorAll('#typeToggle button').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    addType = btn.dataset.type;
+    fileInput.value = '';
+    filePreview.style.display = 'none';
+    filePreview.innerHTML = '';
+    pendingFileData = null;
+    if(addType==='photo'){
+      fileLabel.textContent = 'upload from device';
+      fileHint.textContent = 'choose a photo from your device.';
+      fileInput.accept = 'image/*';
+      urlLabel.textContent = 'image url';
+      urlHint.textContent = 'paste a direct image link instead.';
+    } else {
+      fileLabel.textContent = 'upload from device';
+      fileHint.textContent = 'choose a video from your device.';
+      fileInput.accept = 'video/*';
+      urlLabel.textContent = 'video url';
+      urlHint.textContent = 'or paste a YouTube link / direct .mp4 link instead.';
+    }
+  });
+
+  const submitBtn = document.querySelector('#addForm .btn-primary');
+
+  document.getElementById('addForm').addEventListener('submit', async (e)=>{
+    e.preventDefault();
+    const title = document.getElementById('titleInput').value.trim();
+    const url = document.getElementById('urlInput').value.trim();
+    const by = document.getElementById('byInput').value.trim() || 'You';
+    const tags = document.getElementById('tagsInput').value.split(',').map(t=>t.trim()).filter(Boolean);
+
+    if(!title || !(pendingFileData || url)) {
+      alert('Add a title and either upload a file or paste a URL.');
+      return;
+    }
+
+    function resetForm(){
+      document.getElementById('addForm').reset();
+      document.getElementById('byInput').value = 'You';
+      fileInput.value = '';
+      filePreview.style.display = 'none';
+      filePreview.innerHTML = '';
+      pendingFileData = null;
+      closeAdd();
+      document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+      document.querySelector('.tab[data-filter="all"]').classList.add('active');
+      filter = 'all';
+    }
+
+    // ---- Not connected to Supabase: keep everything in-memory only ----
+    if(!sb){
+      const src = pendingFileData ? pendingFileData.dataUrl : url;
+      items.unshift({
+        id: Date.now(), type: addType, title, by, tags,
+        date: 'Just now', fav: false, src
+      });
+      resetForm();
+      render();
+      return;
+    }
+
+    // ---- Connected: upload file (if any) to Storage, then insert a row ----
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'uploading...';
+    try{
+      let src = url;
+      if(pendingFileData){
+        const file = pendingFileData.file;
+        const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+        const path = `${Date.now()}_${safeName}`;
+        const { error: upErr } = await sb.storage.from(BUCKET).upload(path, file, {
+          cacheControl: '3600', upsert: false
+        });
+        if(upErr) throw upErr;
+        const { data: pub } = sb.storage.from(BUCKET).getPublicUrl(path);
+        src = pub.publicUrl;
+      }
+
+      const { data: inserted, error: insErr } = await sb.from(TABLE).insert({
+        type: addType, title, by_name: by, tags, src, fav: false
+      }).select().single();
+      if(insErr) throw insErr;
+
+      items.unshift({
+        id: inserted.id, type: inserted.type, title: inserted.title,
+        by: inserted.by_name, tags: inserted.tags || [],
+        date: 'Just now', fav: inserted.fav, src: inserted.src
+      });
+      resetForm();
+      banner.className = 'status-banner';
+      render();
+    } catch(err){
+      showBanner('// upload failed: ' + err.message, 'err');
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'pin_it';
+    }
+  });
+
+  async function loadItems(){
+    if(!sb) { render(); return; }
+    const { data, error } = await sb.from(TABLE).select('*').order('created_at', { ascending:false });
+    if(error){
+      showBanner('// could not reach Supabase (' + error.message + ') — showing nothing to save yet.', 'err');
+      items = [];
+      render();
+      return;
+    }
+    items = data.map(row => ({
+      id: row.id,
+      type: row.type,
+      title: row.title,
+      by: row.by_name,
+      tags: row.tags || [],
+      date: new Date(row.created_at).toLocaleDateString(undefined, {month:'short', day:'numeric'}),
+      fav: row.fav,
+      duration: row.duration || null,
+      src: row.src
+    }));
+    if(items.length === 0){
+      showBanner('// connected — board is empty, pin your first file!', 'ok');
+    } else {
+      banner.className = 'status-banner';
+    }
+    render();
+  }
+
+  loadItems();
+})();
+</script>
+
+</body>
+</html>
